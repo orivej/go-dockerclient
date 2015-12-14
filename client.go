@@ -191,8 +191,10 @@ func NewVersionedClient(endpoint string, apiVersionString string) (*Client, erro
 			return nil, err
 		}
 	}
+	tr := cleanhttp.DefaultTransport()
+	tr.DisableKeepAlives = true
 	return &Client{
-		HTTPClient:          cleanhttp.DefaultClient(),
+		HTTPClient:          &http.Client{Transport: tr},
 		Dialer:              &net.Dialer{},
 		endpoint:            endpoint,
 		endpointURL:         u,
@@ -297,9 +299,7 @@ func NewVersionedTLSClientFromBytes(endpoint string, certPEMBlock, keyPEMBlock, 
 	}
 	tr := cleanhttp.DefaultTransport()
 	tr.TLSClientConfig = tlsConfig
-	if err != nil {
-		return nil, err
-	}
+	tr.DisableKeepAlives = true
 	return &Client{
 		HTTPClient:          &http.Client{Transport: tr},
 		TLSConfig:           tlsConfig,
@@ -693,6 +693,7 @@ func (c *Client) unixClient() *http.Client {
 			Dial: func(network, addr string) (net.Conn, error) {
 				return c.Dialer.Dial("unix", socketPath)
 			},
+			DisableKeepAlives: true,
 		},
 	}
 	return c.unixHTTPClient
