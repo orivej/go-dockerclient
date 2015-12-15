@@ -141,6 +141,11 @@ type Client struct {
 	unixHTTPClient      *http.Client
 }
 
+// closeIdleConnections closes unused connections to the docker server.
+func closeIdleConnections(tr **http.Transport) {
+	(*tr).CloseIdleConnections()
+}
+
 // NewClient returns a Client instance ready for communication with the given
 // server endpoint. It will use the latest remote API version available in the
 // server.
@@ -191,8 +196,11 @@ func NewVersionedClient(endpoint string, apiVersionString string) (*Client, erro
 			return nil, err
 		}
 	}
+	tr := cleanhttp.DefaultTransport()
+	runtime.SetFinalizer(&tr, closeIdleConnections)
+	tr.DisableKeepAlives = true
 	return &Client{
-		HTTPClient:          cleanhttp.DefaultClient(),
+		HTTPClient:          &http.Client{Transport: tr},
 		Dialer:              &net.Dialer{},
 		endpoint:            endpoint,
 		endpointURL:         u,
@@ -296,10 +304,8 @@ func NewVersionedTLSClientFromBytes(endpoint string, certPEMBlock, keyPEMBlock, 
 		tlsConfig.RootCAs = caPool
 	}
 	tr := cleanhttp.DefaultTransport()
+	runtime.SetFinalizer(&tr, closeIdleConnections)
 	tr.TLSClientConfig = tlsConfig
-	if err != nil {
-		return nil, err
-	}
 	return &Client{
 		HTTPClient:          &http.Client{Transport: tr},
 		TLSConfig:           tlsConfig,
@@ -688,13 +694,13 @@ func (c *Client) unixClient() *http.Client {
 		return c.unixHTTPClient
 	}
 	socketPath := c.endpointURL.Path
-	c.unixHTTPClient = &http.Client{
-		Transport: &http.Transport{
-			Dial: func(network, addr string) (net.Conn, error) {
-				return c.Dialer.Dial("unix", socketPath)
-			},
+	tr := &http.Transport{
+		Dial: func(network, addr string) (net.Conn, error) {
+			return c.Dialer.Dial("unix", socketPath)
 		},
 	}
+	runtime.SetFinalizer(&tr, closeIdleConnections)
+	c.unixHTTPClient = &http.Client{Transport: tr}
 	return c.unixHTTPClient
 }
 
