@@ -341,6 +341,22 @@ func (c *Client) Endpoint() string {
 	return c.endpoint
 }
 
+type canCloseIdleConnections interface {
+	CloseIdleConnections()
+}
+
+// CloseIdleConnections closes no longer used connections to the docker server.
+func (c *Client) CloseIdleConnections() {
+	for _, httpClient := range []*http.Client{c.HTTPClient, c.unixHTTPClient} {
+		if httpClient == nil {
+			continue
+		}
+		if tr, ok := httpClient.Transport.(canCloseIdleConnections); ok {
+			tr.CloseIdleConnections()
+		}
+	}
+}
+
 // Ping pings the docker server
 //
 // See https://goo.gl/kQCfJj for more details.
